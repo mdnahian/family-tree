@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+instance/
+uploads/
+.env
+venv/
+*.egg-info/
+.claude/
+seed.py
