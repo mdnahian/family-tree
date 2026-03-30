@@ -10,3 +10,4 @@ seed.py
 .terraform/
 *.tfstate
 *.terraform.lock.hcl
+sync.sh

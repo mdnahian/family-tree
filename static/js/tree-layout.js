@@ -203,24 +203,64 @@
                     ));
                 });
 
-                // Layout: [first-sib's spouses | all siblings | last-sib's spouses]
-                // For single child, spouse goes right as normal.
-                // Middle siblings' spouses go to the right edge after the last spouse.
-                const leftSpouses = [];
-                const rightSpouses = [];
-                siblings.forEach((cid, idx) => {
+                // Determine spouse placement by checking where each spouse's
+                // birth family appears in the parent generation's ordering.
+                // Spouses from a family to the RIGHT go on the right edge, etc.
+                // Siblings are reordered so the "connecting" sibling is on the
+                // matching edge, keeping all siblings adjacent.
+                const parentGenOrder = genOrder.get(g - 1) || [];
+                // Find the average index of our parent couple in the parent gen order
+                const myParentIndices = parentCouple.members.map(m => parentGenOrder.indexOf(m)).filter(i => i >= 0);
+                const myParentAvgIdx = myParentIndices.length
+                    ? myParentIndices.reduce((a, b) => a + b, 0) / myParentIndices.length
+                    : 0;
+
+                // For each sibling, classify their spouse direction
+                const sibDirection = new Map(); // cid → 'left' | 'right' | null
+                siblings.forEach(cid => {
                     const sp = spouseMap.get(cid) || [];
-                    if (sp.length === 0) return;
-                    if (idx === 0 && siblings.length > 1) {
-                        leftSpouses.push(...sp);
-                    } else {
-                        rightSpouses.push(...sp);
+                    let dir = null;
+                    for (const sid of sp) {
+                        const spCouple = couples.find(c2 => c2 !== parentCouple && c2.children.includes(sid));
+                        if (spCouple) {
+                            const spIndices = spCouple.members.map(m => parentGenOrder.indexOf(m)).filter(i => i >= 0);
+                            if (spIndices.length) {
+                                const spAvgIdx = spIndices.reduce((a, b) => a + b, 0) / spIndices.length;
+                                dir = spAvgIdx > myParentAvgIdx ? 'right' : 'left';
+                                break;
+                            }
+                        }
                     }
+                    sibDirection.set(cid, dir);
                 });
 
-                leftSpouses.forEach(sid => { placed.add(sid); ordered.push(sid); });
-                siblings.forEach(cid => { placed.add(cid); ordered.push(cid); });
-                rightSpouses.forEach(sid => { placed.add(sid); ordered.push(sid); });
+                // Reorder siblings: those connecting LEFT go first, then neutral, then connecting RIGHT
+                const sortedSiblings = [...siblings].sort((a, b) => {
+                    const da = sibDirection.get(a);
+                    const db = sibDirection.get(b);
+                    const va = da === 'left' ? 0 : da === null ? 1 : 2;
+                    const vb = db === 'left' ? 0 : db === null ? 1 : 2;
+                    return va - vb;
+                });
+
+                // Place spouses adjacent to their partner.
+                // First sibling's spouse goes LEFT, last goes RIGHT,
+                // middle siblings' spouses go immediately after them.
+                const lastIdx = sortedSiblings.length - 1;
+                sortedSiblings.forEach((cid, idx) => {
+                    const sp = spouseMap.get(cid) || [];
+                    const dir = sibDirection.get(cid);
+                    // First sibling: spouse on the left
+                    if (idx === 0 && sortedSiblings.length > 1 && sp.length > 0 && (dir === 'left' || dir === null)) {
+                        sp.forEach(sid => { placed.add(sid); ordered.push(sid); });
+                    }
+                    placed.add(cid);
+                    ordered.push(cid);
+                    // Last sibling or middle sibling or first with right-direction: spouse on the right
+                    if (sp.length > 0 && !(idx === 0 && sortedSiblings.length > 1 && (dir === 'left' || dir === null))) {
+                        sp.forEach(sid => { placed.add(sid); ordered.push(sid); });
+                    }
+                });
             });
 
             // Any persons in this gen not yet placed (no parent in prev gen, e.g. married in)
@@ -255,22 +295,18 @@
         }
 
         // Helper: build the group of children + their spouses for centering.
-        // Children who "married out" (spouse is from a larger family) are skipped —
-        // they stay with the spouse's family. For remaining children, ALL spouses
-        // are included so the entire family unit moves together.
+        // Blood children are ALWAYS included. Spouses are only included if
+        // they are NOT a child of a different couple (those get centered by
+        // their own parents). This prevents cross-family pulling.
         function buildChildGroup(c) {
             const group = [];
             c.children.forEach(cid => {
-                const marriedOut = spousesOf.get(cid).some(sid => {
-                    const sc = couples.find(c2 => c2.children.includes(sid));
-                    return sc && sc !== c && sc.children.length > c.children.length;
-                });
-                if (marriedOut) return;
-
                 group.push(cid);
                 spousesOf.get(cid).forEach(sid => {
-                    if (gen.get(sid) === gen.get(cid) && !group.includes(sid))
-                        group.push(sid);
+                    if (gen.get(sid) === gen.get(cid) && !group.includes(sid)) {
+                        const isChildElsewhere = couples.some(c2 => c2 !== c && c2.children.includes(sid));
+                        if (!isChildElsewhere) group.push(sid);
+                    }
                 });
             });
             return group;
@@ -307,9 +343,8 @@
             // Keep spouse pairs locked together during overlap resolution
             for (let g = 0; g <= maxGen; g++) {
                 const order = genOrder.get(g) || [];
-                // Re-sort by current X but keep spouses adjacent
+                // Walk in genOrder sequence — never re-sort by X
                 const items = order.map(pid => ({ id: pid, x: positions.get(pid).x }));
-                items.sort((a, b) => a.x - b.x);
                 for (let i = 1; i < items.length; i++) {
                     const prevIsSpouse = spousesOf.get(items[i].id).includes(items[i - 1].id);
                     const minGap = prevIsSpouse ? SPOUSE_GAP : CARD_GAP_X;
@@ -342,7 +377,6 @@
                 });
                 // Re-resolve overlaps after spouse snap (snap can create new overlaps)
                 const items2 = order.map(pid => ({ id: pid, x: positions.get(pid).x }));
-                items2.sort((a, b) => a.x - b.x);
                 for (let i = 1; i < items2.length; i++) {
                     const prevIsSpouse = spousesOf.get(items2[i].id).includes(items2[i - 1].id);
                     const minGap = prevIsSpouse ? SPOUSE_GAP : CARD_GAP_X;
@@ -364,7 +398,6 @@
         for (let g = 0; g <= maxGen; g++) {
             const order = genOrder.get(g) || [];
             const items = order.map(pid => ({ id: pid, x: positions.get(pid).x }));
-            items.sort((a, b) => a.x - b.x);
             for (let i = 1; i < items.length; i++) {
                 const prevIsSpouse = spousesOf.get(items[i].id).includes(items[i - 1].id);
                 const idealGap = prevIsSpouse ? SPOUSE_GAP : CARD_GAP_X;
@@ -402,7 +435,6 @@
         for (let g = 0; g <= maxGen; g++) {
             const order = genOrder.get(g) || [];
             const items = order.map(pid => ({ id: pid, x: positions.get(pid).x }));
-            items.sort((a, b) => a.x - b.x);
             for (let i = 1; i < items.length; i++) {
                 const prevIsSpouse = spousesOf.get(items[i].id).includes(items[i - 1].id);
                 const minGap = prevIsSpouse ? SPOUSE_GAP : CARD_GAP_X;
@@ -505,6 +537,8 @@
 
         // Draw branch lines for each parent pair
         let branchGroupId = 0;
+        // Collect all branches first so we can detect horizontal overlaps
+        const branchBars = [];
         parentPairs.forEach(pair => {
             const parentPositions = pair.parents.map(pid => positions.get(pid)).filter(Boolean);
             if (parentPositions.length === 0) return;
@@ -512,9 +546,6 @@
             const pLeftX = Math.min(...parentPositions.map(p => p.x));
             const pRightX = Math.max(...parentPositions.map(p => p.x + CARD_W));
             const anchorX = (pLeftX + pRightX) / 2;
-            // For couples: start from spouse line (card mid-height) so the branch
-            // drops from the dashed connector through the gap between the two cards.
-            // For single parents: start from card bottom.
             const anchorY = pair.parents.length >= 2
                 ? parentPositions[0].y + CARD_H / 2
                 : parentPositions[0].y + CARD_H;
@@ -522,23 +553,30 @@
             const childPositions = pair.children.map(cid => positions.get(cid)).filter(Boolean);
             if (childPositions.length === 0) return;
             const childTopY = childPositions[0].y;
-            // Horizontal bar halfway between parent card bottom and child card top
             const parentBottom = parentPositions[0].y + CARD_H;
-            const midY = (parentBottom + childTopY) / 2;
-            const childXs = childPositions.map(cp => cp.x + CARD_W / 2);
+            const baseMidY = (parentBottom + childTopY) / 2;
 
+            // Check if this bar's X range would touch/overlap a previous bar at the same baseMidY
+            const childXs = childPositions.map(cp => cp.x + CARD_W / 2);
+            const allXPoints = [...childXs, anchorX];
+            const barLeft = Math.min(...allXPoints);
+            const barRight = Math.max(...allXPoints);
+            let midY = baseMidY;
+            const gap = 12; // vertical offset between overlapping bars
+            for (const prev of branchBars) {
+                if (Math.abs(prev.midY - midY) < gap && barLeft <= prev.right + 30 && barRight >= prev.left - 30) {
+                    midY = prev.midY + gap;
+                }
+            }
+            branchBars.push({ midY, left: barLeft, right: barRight });
             // All segments in this parent-pair share a group for hover highlighting
             const group = `branch-${branchGroupId++}`;
-            // All people involved in this branch: parents + children
             const allPersons = [...new Set([...pair.parents, ...pair.children])];
 
             // Vertical drop from anchor to midY
             links.push({ path: `M ${anchorX} ${anchorY} L ${anchorX} ${midY}`, type: 'parent-child', ids: allPersons, group });
 
             // Horizontal bar
-            const allXPoints = [...childXs, anchorX];
-            const barLeft = Math.min(...allXPoints);
-            const barRight = Math.max(...allXPoints);
             if (barRight - barLeft > 0.5) {
                 links.push({ path: `M ${barLeft} ${midY} L ${barRight} ${midY}`, type: 'parent-child', ids: allPersons, group });
             }
@@ -612,15 +650,19 @@
     }
 
     function renderLinks(svgG, links) {
+        let linkIdx = 0;
         links.forEach(l => {
+            const lid = `link-${linkIdx++}`;
             const visPath = svgG.append('path').attr('d', l.path)
                 .attr('class', `tree-link tree-link-${l.type}`)
-                .attr('fill', 'none').attr('stroke', '#94a3b8').attr('stroke-width', 2);
+                .attr('data-lid', lid)
+                .attr('fill', 'none').attr('stroke', document.body.classList.contains('dark-mode') ? '#475569' : '#94a3b8').attr('stroke-width', 2);
             if (l.group) visPath.attr('data-group', l.group);
 
             if (l.ids && l.ids.length > 0) {
                 const hitPath = svgG.append('path').attr('d', l.path)
                     .attr('class', 'tree-link-hit')
+                    .attr('data-lid', lid)
                     .attr('fill', 'none').attr('stroke', 'transparent').attr('stroke-width', 16)
                     .attr('data-persons', l.ids.join(','))
                     .attr('data-link-type', l.type)
@@ -630,19 +672,24 @@
                 hitPath
                     .on('mouseenter', function () {
                         const group = this.getAttribute('data-group');
+                        const hoverColor = document.body.classList.contains('dark-mode') ? '#60a5fa' : '#2563eb';
                         if (group) {
-                            // Raise each visible link + its hit path to the top of the SVG so it renders above overlapping branches
-                            svgG.selectAll(`.tree-link[data-group="${group}"]`).attr('stroke', '#2563eb').attr('stroke-width', 3).raise();
+                            svgG.selectAll(`.tree-link[data-group="${group}"]`).attr('stroke', hoverColor).attr('stroke-width', 3).raise();
                             svgG.selectAll(`.tree-link-hit[data-group="${group}"]`).raise();
                         } else {
-                            d3.select(this.previousElementSibling).attr('stroke', '#2563eb').attr('stroke-width', 3).raise();
+                            const myLid = this.getAttribute('data-lid');
+                            svgG.select(`.tree-link[data-lid="${myLid}"]`).attr('stroke', hoverColor).attr('stroke-width', 3).raise();
                             d3.select(this).raise();
                         }
                     })
                     .on('mouseleave', function () {
                         const group = this.getAttribute('data-group');
-                        if (group) svgG.selectAll(`.tree-link[data-group="${group}"]`).attr('stroke', '#94a3b8').attr('stroke-width', 2);
-                        else d3.select(this.previousElementSibling).attr('stroke', '#94a3b8').attr('stroke-width', 2);
+                        const defaultColor = document.body.classList.contains('dark-mode') ? '#475569' : '#94a3b8';
+                        if (group) svgG.selectAll(`.tree-link[data-group="${group}"]`).attr('stroke', defaultColor).attr('stroke-width', 2);
+                        else {
+                            const myLid = this.getAttribute('data-lid');
+                            svgG.select(`.tree-link[data-lid="${myLid}"]`).attr('stroke', defaultColor).attr('stroke-width', 2);
+                        }
                     })
                     .on('click', function () {
                         const persons = this.getAttribute('data-persons');

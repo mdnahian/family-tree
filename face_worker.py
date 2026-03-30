@@ -73,10 +73,16 @@ def _process_next_job(app):
 
     try:
         from face import detect_faces, suggest_matches
+        from models import MediaPerson
 
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], job.file_path)
         faces = detect_faces(file_path)
 
+        # Get persons already tagged on this media
+        tagged_person_ids = {mp.person_id for mp in
+                            MediaPerson.query.filter_by(media_id=job.media_id).all()}
+
+        face_records = []
         for f in faces:
             suggestion = suggest_matches(f['encoding_bytes'])
             fd = FaceDetection(
@@ -90,6 +96,16 @@ def _process_next_job(app):
                 confidence=suggestion['distance'] if suggestion else None,
             )
             db.session.add(fd)
+            face_records.append((fd, suggestion))
+
+        # Auto-confirm: if only 1 face and 1 tagged person, confirm the match
+        if len(face_records) == 1 and len(tagged_person_ids) == 1:
+            face_records[0][0].person_id = next(iter(tagged_person_ids))
+        elif len(face_records) > 1:
+            # If a suggested match corresponds to a tagged person, auto-confirm it
+            for fd, suggestion in face_records:
+                if suggestion and suggestion['person_id'] in tagged_person_ids and not fd.person_id:
+                    fd.person_id = suggestion['person_id']
 
         job.status = 'done'
         job.completed_at = datetime.now(timezone.utc).isoformat()

@@ -254,7 +254,6 @@
 
             closeModal();
             await refreshTree();
-            navigateToPersonId(personId);
         };
     }
 
@@ -475,6 +474,20 @@
         }
         infobox += `</div>`; // close infobox-rows
 
+        // Links inside infobox (above relationships)
+        if (person.access !== 'limited' && person.external_urls) {
+            let urls = [];
+            try { urls = JSON.parse(person.external_urls); } catch (e) {
+                if (person.external_urls && person.external_urls.startsWith('http')) urls = [person.external_urls];
+            }
+            if (!Array.isArray(urls)) urls = urls ? [urls] : [];
+            if (urls.length) {
+                infobox += `<div class="infobox-section"><div class="infobox-section-title">Links</div>`;
+                urls.forEach(u => { infobox += `<div style="font-size:13px;margin-bottom:4px;word-break:break-all;"><a href="${escapeHtml(u)}" target="_blank" rel="noopener" style="color:var(--primary);text-decoration:none;">${escapeHtml(u)}</a></div>`; });
+                infobox += `</div>`;
+            }
+        }
+
         // Relationships inside infobox
         if (person.access !== 'limited') {
             // Parents
@@ -562,20 +575,6 @@
         } else {
             if (person.biography) {
                 main += `<div class="panel-section"><div class="panel-bio">${escapeHtml(person.biography)}</div></div>`;
-            }
-            if (person.external_urls) {
-                try {
-                    const urls = JSON.parse(person.external_urls);
-                    if (Array.isArray(urls) && urls.length) {
-                        main += `<div class="panel-section"><div class="panel-section-title">Links</div>`;
-                        urls.forEach(u => { main += `<div><a href="${escapeHtml(u)}" target="_blank" rel="noopener">${escapeHtml(u)}</a></div>`; });
-                        main += `</div>`;
-                    }
-                } catch (e) {
-                    if (person.external_urls && person.external_urls.startsWith('http')) {
-                        main += `<div class="panel-section"><div class="panel-section-title">Links</div><div><a href="${escapeHtml(person.external_urls)}" target="_blank" rel="noopener">${escapeHtml(person.external_urls)}</a></div></div>`;
-                    }
-                }
             }
             // Gallery (upload button is the first item in the grid)
             main += `<div class="panel-section gallery-section">
@@ -1745,7 +1744,7 @@
                 <div class="form-group"><label>Occupation</label><input name="occupation" value="${escapeHtml(p.occupation || '')}"></div>
                 <div class="form-group"><label>Phone Number</label><input name="phone_number" value="${escapeHtml(p.phone_number || '')}"></div>
                 <div class="form-group"><label>Biography</label><textarea name="biography">${escapeHtml(p.biography || '')}</textarea></div>
-                <div class="form-group"><label>External URLs (one per line or JSON)</label><textarea name="external_urls">${escapeHtml(p.external_urls || '')}</textarea></div>
+                <div class="form-group"><label>Links</label><div id="linksContainer"></div><button type="button" class="btn btn-secondary" style="margin-top:4px;font-size:12px;padding:4px 10px;" onclick="document.getElementById('linksContainer').insertAdjacentHTML('beforeend','<input class=\'link-input\' name=\'link\' placeholder=\'https://...\' style=\'margin-bottom:4px;width:100%;\'>')">+ Add Link</button></div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="window._closeModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary">Save</button>
@@ -1753,10 +1752,29 @@
             </form>`;
         overlay.classList.remove('hidden');
 
+        // Populate existing links
+        const linksContainer = document.getElementById('linksContainer');
+        let existingUrls = [];
+        try { existingUrls = JSON.parse(p.external_urls || '[]'); } catch (e) {
+            if (p.external_urls) existingUrls = [p.external_urls];
+        }
+        if (!Array.isArray(existingUrls)) existingUrls = existingUrls ? [existingUrls] : [];
+        existingUrls.forEach(url => {
+            linksContainer.insertAdjacentHTML('beforeend', `<input class="link-input" name="link" value="${escapeHtml(url)}" placeholder="https://..." style="margin-bottom:4px;width:100%;">`);
+        });
+        // Always show at least one empty input
+        if (existingUrls.length === 0) {
+            linksContainer.insertAdjacentHTML('beforeend', '<input class="link-input" name="link" placeholder="https://..." style="margin-bottom:4px;width:100%;">');
+        }
+
         document.getElementById('editPersonForm').onsubmit = async (e) => {
             e.preventDefault();
             const data = {};
-            new FormData(e.target).forEach((v, k) => { data[k] = v; });
+            new FormData(e.target).forEach((v, k) => { if (k !== 'link') data[k] = v; });
+            // Collect link inputs into JSON array
+            const links = [...document.querySelectorAll('#linksContainer .link-input')]
+                .map(el => el.value.trim()).filter(Boolean);
+            data.external_urls = JSON.stringify(links);
             await fetch(`/api/persons/${personId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -1845,6 +1863,12 @@
     function setupEventListeners() {
         document.getElementById('btnClosePanel').onclick = closePanel;
         document.getElementById('btnEditMode').onclick = toggleEditMode;
+        document.getElementById('btnDarkMode').onclick = toggleDarkMode;
+        // Restore dark mode from localStorage
+        if (localStorage.getItem('darkMode') === '1') {
+            document.body.classList.add('dark-mode');
+            document.getElementById('darkModeIcon').innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+        }
         document.getElementById('btnNotifications').onclick = showNotifications;
         document.getElementById('lightboxClose').onclick = closeLightbox;
         document.querySelector('.lightbox-backdrop').onclick = closeLightbox;
@@ -1870,6 +1894,16 @@
         document.body.classList.toggle('edit-mode');
         btn.classList.toggle('active');
         btn.title = document.body.classList.contains('edit-mode') ? 'Exit edit mode' : 'Toggle edit mode';
+    }
+
+    function toggleDarkMode() {
+        document.body.classList.toggle('dark-mode');
+        const isDark = document.body.classList.contains('dark-mode');
+        localStorage.setItem('darkMode', isDark ? '1' : '0');
+        // Swap icon: moon for light mode, sun for dark mode
+        document.getElementById('darkModeIcon').innerHTML = isDark
+            ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+            : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
     }
 
     async function unfriend(userId) {

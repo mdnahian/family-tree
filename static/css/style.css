@@ -5,7 +5,7 @@
     --primary: #2563eb;
     --primary-hover: #1d4ed8;
     --primary-light: rgba(37,99,235,0.08);
-    --bg: #f8fafc;
+    --bg: #e8ecf0;
     --surface: #ffffff;
     --glass: rgba(255,255,255,0.72);
     --glass-border: rgba(255,255,255,0.3);
@@ -20,7 +20,7 @@
     --panel-w: 90vw;
     --dot-size: 12px;
     --dot-color: #2563eb;
-    --grid-color: #e8ecf0;
+    --grid-color: #d0d5dd;
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
@@ -40,12 +40,57 @@
     --z-lightbox: 200;
 }
 
+/* ── Dark mode overrides ──────────────────────────────────── */
+body.dark-mode {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --glass: rgba(30,41,59,0.85);
+    --glass-border: rgba(51,65,85,0.5);
+    --text: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --border: #334155;
+    --grid-color: #1e293b;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+    --shadow-xl: 0 16px 48px rgba(0,0,0,0.5);
+}
+body.dark-mode .tree-card .card-inner { background: rgba(30,41,59,0.9); border-color: var(--glass-border); }
+body.dark-mode .tree-card:hover .card-inner { border-color: rgba(37,99,235,0.5); box-shadow: 0 4px 20px rgba(37,99,235,0.2); }
+body.dark-mode .card-photo { background: #334155; }
+body.dark-mode .card-photo-placeholder { background: #334155; color: var(--text-secondary); }
+body.dark-mode .btn-icon:hover { background: var(--surface); }
+body.dark-mode .user-name:hover { background: var(--surface); }
+body.dark-mode .search-container input, body.dark-mode #searchInput { background: var(--glass); border-color: var(--glass-border); color: var(--text); }
+body.dark-mode .search-container input:focus, body.dark-mode #searchInput:focus { background: var(--surface); border-color: var(--primary); box-shadow: 0 4px 24px rgba(37,99,235,0.2); }
+body.dark-mode .search-results { background: var(--surface); border-color: var(--border); }
+body.dark-mode .search-result-item:hover { background: rgba(51,65,85,0.5); }
+body.dark-mode .side-panel { background: var(--glass); }
+body.dark-mode .side-panel .infobox { background: var(--surface); border-color: var(--border); }
+body.dark-mode .modal-overlay .modal { background: var(--surface); }
+body.dark-mode .form-group input, body.dark-mode .form-group select, body.dark-mode .form-group textarea { background: rgba(15,23,42,0.6); border-color: var(--border); color: var(--text); }
+body.dark-mode .form-group input:focus, body.dark-mode .form-group select:focus, body.dark-mode .form-group textarea:focus { background: #0f172a; }
+body.dark-mode .btn-secondary { background: var(--surface); border-color: var(--border); color: var(--text); }
+body.dark-mode .btn-secondary:hover { background: #334155; }
+body.dark-mode .notif-dropdown { background: var(--surface); border-color: var(--border); }
+body.dark-mode .lightbox { background: rgba(0,0,0,0.92); }
+body.dark-mode .gallery-item { background: #334155; }
+body.dark-mode .gallery-search { background: rgba(15,23,42,0.6); border-color: var(--border); color: var(--text); }
+body.dark-mode .gallery-search:focus { background: #0f172a; }
+body.dark-mode .gallery-item-action { background: rgba(30,41,59,0.85); }
+body.dark-mode .gallery-item-action:hover { background: var(--surface); }
+body.dark-mode .tree-link { stroke: #475569; }
+body.dark-mode #btnDarkMode { background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important; }
+body.dark-mode .relation-link { background: rgba(51,65,85,0.5); color: var(--text); }
+body.dark-mode .relation-link:hover { background: rgba(37,99,235,0.15); }
+body.dark-mode .infobox-photo-placeholder { background: #334155; }
+
 body {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     color: var(--text);
     overflow: hidden;
     height: 100vh;
-    background-color: #f1f5f9;
+    background-color: var(--bg);
     background-image:
         linear-gradient(var(--grid-color) 1px, transparent 1px),
         linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
