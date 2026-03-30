@@ -25,7 +25,7 @@ class Config:
 
     # App
     APP_NAME = 'Family Tree'
-    APP_VERSION = '1.1.4'  # bump to bust static file caches
+    APP_VERSION = '1.1.8'  # bump to bust static file caches
     APP_URL = os.environ.get('APP_URL', 'http://localhost:5000')
 
     # Profile photo thumbnail size

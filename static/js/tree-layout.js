@@ -312,24 +312,35 @@
             return group;
         }
 
-        // Sub-pass (b): center children under parents (iterate a few times to converge)
+        // Helper: resolve overlaps in a generation by pushing items right
+        function resolveOverlaps(g) {
+            const order = genOrder.get(g) || [];
+            const items = order.map(pid => ({ id: pid, x: positions.get(pid).x }));
+            for (let i = 1; i < items.length; i++) {
+                const prevIsSpouse = spousesOf.get(items[i].id).includes(items[i - 1].id);
+                const minGap = prevIsSpouse ? SPOUSE_GAP : CARD_GAP_X;
+                const minX = items[i - 1].x + CARD_W + minGap;
+                if (items[i].x < minX) {
+                    const push = minX - items[i].x;
+                    for (let j = i; j < items.length; j++) {
+                        items[j].x += push;
+                        positions.get(items[j].id).x = items[j].x;
+                    }
+                }
+            }
+        }
+
+        // Sub-pass (b): center children under parents (top-down, iterate to converge)
         for (let iter = 0; iter < 3; iter++) {
-            // For each couple with children, compute parent midpoint and children midpoint,
-            // then shift children to align
             couples.forEach(c => {
                 if (c.children.length === 0) return;
-
-                // Parent midpoint
                 const pxs = c.members.map(m => positions.get(m)).filter(Boolean);
                 if (pxs.length === 0) return;
                 const parentMid = (Math.min(...pxs.map(p => p.x)) + Math.max(...pxs.map(p => p.x)) + CARD_W) / 2;
-
                 const childGroup = buildChildGroup(c);
-
                 const cxs = childGroup.map(cid => positions.get(cid)).filter(Boolean);
                 if (cxs.length === 0) return;
                 const childMid = (Math.min(...cxs.map(p => p.x)) + Math.max(...cxs.map(p => p.x)) + CARD_W) / 2;
-
                 const shift = parentMid - childMid;
                 if (Math.abs(shift) > 1) {
                     childGroup.forEach(cid => {
@@ -338,63 +349,40 @@
                     });
                 }
             });
-
-            // After shifting, resolve overlaps in each generation
-            // Keep spouse pairs locked together during overlap resolution
-            for (let g = 0; g <= maxGen; g++) {
-                const order = genOrder.get(g) || [];
-                // Walk in genOrder sequence — never re-sort by X
-                const items = order.map(pid => ({ id: pid, x: positions.get(pid).x }));
-                for (let i = 1; i < items.length; i++) {
-                    const prevIsSpouse = spousesOf.get(items[i].id).includes(items[i - 1].id);
-                    const minGap = prevIsSpouse ? SPOUSE_GAP : CARD_GAP_X;
-                    const minX = items[i - 1].x + CARD_W + minGap;
-                    if (items[i].x < minX) {
-                        const push = minX - items[i].x;
-                        for (let j = i; j < items.length; j++) {
-                            items[j].x += push;
-                            positions.get(items[j].id).x = items[j].x;
-                        }
-                    }
-                }
-                // Force spouses to be adjacent (snap to each other)
-                items.forEach(item => {
-                    const mySpouses = spousesOf.get(item.id) || [];
-                    mySpouses.forEach(sid => {
-                        const spos = positions.get(sid);
-                        const myPos = positions.get(item.id);
-                        if (!spos || !myPos || gen.get(sid) !== g) return;
-                        const expectedGap = CARD_W + SPOUSE_GAP;
-                        const actualGap = Math.abs(spos.x - myPos.x);
-                        if (actualGap > expectedGap + 1) {
-                            if (spos.x > myPos.x) {
-                                spos.x = myPos.x + expectedGap;
-                            } else {
-                                spos.x = myPos.x - expectedGap;
-                            }
-                        }
-                    });
-                });
-                // Re-resolve overlaps after spouse snap (snap can create new overlaps)
-                const items2 = order.map(pid => ({ id: pid, x: positions.get(pid).x }));
-                for (let i = 1; i < items2.length; i++) {
-                    const prevIsSpouse = spousesOf.get(items2[i].id).includes(items2[i - 1].id);
-                    const minGap = prevIsSpouse ? SPOUSE_GAP : CARD_GAP_X;
-                    const minX = items2[i - 1].x + CARD_W + minGap;
-                    if (items2[i].x < minX) {
-                        const push = minX - items2[i].x;
-                        for (let j = i; j < items2.length; j++) {
-                            items2[j].x += push;
-                            positions.get(items2[j].id).x = items2[j].x;
-                        }
-                    }
-                }
-            }
+            for (let g = 0; g <= maxGen; g++) resolveOverlaps(g);
         }
 
-        // Final compaction: close unnecessary large gaps in each generation
-        // For each pair of adjacent cards, if the gap is much larger than needed,
-        // shift the right card (and everything after) left
+        // After main centering: shift in-law parents to center over their children.
+        // These are couples whose members have NO parents in the tree (they "float")
+        // and are misaligned with their children.
+        couples.forEach(c => {
+            if (c.children.length === 0) return;
+            // Only target couples where NO member has a parent in the tree
+            const hasParentInTree = c.members.some(mid =>
+                (parentsOf.get(mid) || []).length > 0
+            );
+            if (hasParentInTree) return;
+
+            const pxs = c.members.map(m => positions.get(m)).filter(Boolean);
+            if (pxs.length === 0) return;
+            const parentMid = (Math.min(...pxs.map(p => p.x)) + Math.max(...pxs.map(p => p.x)) + CARD_W) / 2;
+            const childGroup = buildChildGroup(c);
+            const cxs = childGroup.map(cid => positions.get(cid)).filter(Boolean);
+            if (cxs.length === 0) return;
+            const childMid = (Math.min(...cxs.map(p => p.x)) + Math.max(...cxs.map(p => p.x)) + CARD_W) / 2;
+            const shift = childMid - parentMid;
+            if (Math.abs(shift) > 50) {
+                // Shift parents to center over children
+                c.members.forEach(mid => {
+                    const pos = positions.get(mid);
+                    if (pos) pos.x += shift;
+                });
+            }
+        });
+        // Resolve any overlaps created by in-law parent shifting
+        for (let g = 0; g <= maxGen; g++) resolveOverlaps(g);
+
+        // Compaction: close unnecessary large gaps in each generation
         for (let g = 0; g <= maxGen; g++) {
             const order = genOrder.get(g) || [];
             const items = order.map(pid => ({ id: pid, x: positions.get(pid).x }));
@@ -411,25 +399,6 @@
                 }
             }
         }
-
-        // Re-center children under parents after compaction (1 pass)
-        couples.forEach(c => {
-            if (c.children.length === 0) return;
-            const pxs = c.members.map(m => positions.get(m)).filter(Boolean);
-            if (pxs.length === 0) return;
-            const parentMid = (Math.min(...pxs.map(p => p.x)) + Math.max(...pxs.map(p => p.x)) + CARD_W) / 2;
-            const childGroup = buildChildGroup(c);
-            const cxs = childGroup.map(cid => positions.get(cid)).filter(Boolean);
-            if (cxs.length === 0) return;
-            const childMid = (Math.min(...cxs.map(p => p.x)) + Math.max(...cxs.map(p => p.x)) + CARD_W) / 2;
-            const shift = parentMid - childMid;
-            if (Math.abs(shift) > 1) {
-                childGroup.forEach(cid => {
-                    const pos = positions.get(cid);
-                    if (pos) pos.x += shift;
-                });
-            }
-        });
 
         // Final overlap resolution
         for (let g = 0; g <= maxGen; g++) {
