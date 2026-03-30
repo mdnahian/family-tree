@@ -20,18 +20,18 @@ else
 fi
 
 echo "=== Creating app user ==="
-id -u bdtree &>/dev/null || useradd -r -m -d /opt/bdtree -s /bin/bash bdtree
+id -u family-tree &>/dev/null || useradd -r -m -d /opt/family-tree -s /bin/bash family-tree
 
 echo "=== Creating directories ==="
-mkdir -p /opt/bdtree/{instance,uploads,backups}
-mkdir -p /var/log/bdtree
+mkdir -p /opt/family-tree/{instance,uploads,backups}
+mkdir -p /var/log/family-tree
 mkdir -p /var/www/certbot
-chown -R bdtree:bdtree /opt/bdtree /var/log/bdtree
+chown -R family-tree:family-tree /opt/family-tree /var/log/family-tree
 
 echo "=== Server setup complete ==="
 echo ""
 echo "Next steps:"
 echo "  1. Run deploy.sh to push the app code"
-echo "  2. Create /opt/bdtree/.env from .env.example"
-echo "  3. systemctl start bdtree"
+echo "  2. Create /opt/family-tree/.env from .env.example"
+echo "  3. systemctl start family-tree"
 echo "  4. (Optional) certbot --nginx -d yourdomain.com"

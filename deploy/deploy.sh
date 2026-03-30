@@ -1,10 +1,10 @@
 #!/bin/bash
-# Deploy bdtree to a DigitalOcean droplet.
+# Deploy family-tree to a DigitalOcean droplet.
 # Usage: ./deploy.sh root@droplet-ip
 set -euo pipefail
 
 REMOTE="${1:?Usage: deploy.sh user@host}"
-APP_DIR="/opt/bdtree"
+APP_DIR="/opt/family-tree"
 LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "=== Syncing app files to ${REMOTE} ==="
@@ -23,7 +23,7 @@ rsync -avz --delete \
 echo "=== Running remote setup ==="
 ssh "${REMOTE}" << 'REMOTE_SCRIPT'
 set -euo pipefail
-APP_DIR="/opt/bdtree"
+APP_DIR="/opt/family-tree"
 cd "$APP_DIR"
 
 # Virtualenv
@@ -43,34 +43,34 @@ print('Models ready')
 " 2>/dev/null || echo "Model download deferred to first use"
 
 # Fix permissions
-chown -R bdtree:bdtree "$APP_DIR"
+chown -R family-tree:family-tree "$APP_DIR"
 chmod +x "$APP_DIR/deploy/configs/backup.sh"
 
 # Install systemd service
-cp "$APP_DIR/deploy/configs/bdtree.service" /etc/systemd/system/
+cp "$APP_DIR/deploy/configs/family-tree.service" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable bdtree
+systemctl enable family-tree
 
 # Install nginx config
-cp "$APP_DIR/deploy/configs/nginx.conf" /etc/nginx/sites-available/bdtree
-ln -sf /etc/nginx/sites-available/bdtree /etc/nginx/sites-enabled/bdtree
+cp "$APP_DIR/deploy/configs/nginx.conf" /etc/nginx/sites-available/family-tree
+ln -sf /etc/nginx/sites-available/family-tree /etc/nginx/sites-enabled/family-tree
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 
 # Install backup cron
 cp "$APP_DIR/deploy/configs/backup.sh" "$APP_DIR/backup.sh"
 chmod +x "$APP_DIR/backup.sh"
-(crontab -l 2>/dev/null | grep -v backup.sh; echo "0 3 * * * /opt/bdtree/backup.sh >> /var/log/bdtree/backup.log 2>&1") | crontab -
+(crontab -l 2>/dev/null | grep -v backup.sh; echo "0 3 * * * /opt/family-tree/backup.sh >> /var/log/family-tree/backup.log 2>&1") | crontab -
 
 # Restart app
 if [ -f "$APP_DIR/.env" ]; then
-    systemctl restart bdtree
+    systemctl restart family-tree
     echo "=== App restarted ==="
 else
-    echo "=== WARNING: Create /opt/bdtree/.env before starting the app ==="
-    echo "    cp /opt/bdtree/deploy/.env.example /opt/bdtree/.env"
-    echo "    nano /opt/bdtree/.env"
-    echo "    systemctl start bdtree"
+    echo "=== WARNING: Create /opt/family-tree/.env before starting the app ==="
+    echo "    cp /opt/family-tree/deploy/.env.example /opt/family-tree/.env"
+    echo "    nano /opt/family-tree/.env"
+    echo "    systemctl start family-tree"
 fi
 REMOTE_SCRIPT
 

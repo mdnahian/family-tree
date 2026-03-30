@@ -8,8 +8,8 @@ threads = 4
 # 120s timeout for large file uploads
 timeout = 120
 
-accesslog = "/var/log/bdtree/gunicorn-access.log"
-errorlog = "/var/log/bdtree/gunicorn-error.log"
+accesslog = "/var/log/family-tree/gunicorn-access.log"
+errorlog = "/var/log/family-tree/gunicorn-error.log"
 loglevel = "info"
 
 graceful_timeout = 30

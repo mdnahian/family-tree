@@ -1,7 +1,7 @@
 output "droplet_ip" {
-  value = digitalocean_droplet.bdtree.ipv4_address
+  value = digitalocean_droplet.family-tree.ipv4_address
 }
 
 output "reserved_ip" {
-  value = digitalocean_reserved_ip.bdtree.ip_address
+  value = digitalocean_reserved_ip.family-tree.ip_address
 }

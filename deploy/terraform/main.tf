@@ -11,19 +11,19 @@ provider "digitalocean" {
   token = var.do_token
 }
 
-resource "digitalocean_droplet" "bdtree" {
+resource "digitalocean_droplet" "family-tree" {
   image    = "ubuntu-22-04-x64"
-  name     = "bdtree"
+  name     = "family-tree"
   region   = var.region
   size     = var.droplet_size
   ssh_keys = [var.ssh_key_fingerprint]
-  tags     = ["bdtree", "family-tree"]
+  tags     = ["family-tree"]
 }
 
-resource "digitalocean_firewall" "bdtree" {
-  name = "bdtree-fw"
+resource "digitalocean_firewall" "family-tree" {
+  name = "family-tree-fw"
 
-  droplet_ids = [digitalocean_droplet.bdtree.id]
+  droplet_ids = [digitalocean_droplet.family-tree.id]
 
   inbound_rule {
     protocol         = "tcp"
@@ -61,7 +61,7 @@ resource "digitalocean_firewall" "bdtree" {
   }
 }
 
-resource "digitalocean_reserved_ip" "bdtree" {
+resource "digitalocean_reserved_ip" "family-tree" {
   region     = var.region
-  droplet_id = digitalocean_droplet.bdtree.id
+  droplet_id = digitalocean_droplet.family-tree.id
 }

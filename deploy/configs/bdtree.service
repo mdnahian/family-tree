@@ -1,15 +1,15 @@
 [Unit]
-Description=BDTree Family Tree Application
+Description=family-tree Family Tree Application
 After=network.target
 
 [Service]
 Type=notify
-User=bdtree
-Group=bdtree
-WorkingDirectory=/opt/bdtree
-Environment="PATH=/opt/bdtree/venv/bin:/usr/local/bin:/usr/bin"
-EnvironmentFile=/opt/bdtree/.env
-ExecStart=/opt/bdtree/venv/bin/gunicorn -c /opt/bdtree/gunicorn.conf.py app:app
+User=family-tree
+Group=family-tree
+WorkingDirectory=/opt/family-tree
+Environment="PATH=/opt/family-tree/venv/bin:/usr/local/bin:/usr/bin"
+EnvironmentFile=/opt/family-tree/.env
+ExecStart=/opt/family-tree/venv/bin/gunicorn -c /opt/family-tree/gunicorn.conf.py app:app
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=5
