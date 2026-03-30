@@ -19,6 +19,17 @@ else
     echo "Swap already exists"
 fi
 
+echo "=== Generating self-signed SSL certificate ==="
+if [ ! -f /etc/ssl/certs/family-tree.crt ]; then
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -keyout /etc/ssl/private/family-tree.key \
+        -out /etc/ssl/certs/family-tree.crt \
+        -subj "/CN=family-tree"
+    echo "Certificate created (valid for 10 years)"
+else
+    echo "Certificate already exists"
+fi
+
 echo "=== Creating app user ==="
 id -u family-tree &>/dev/null || useradd -r -m -d /opt/family-tree -s /bin/bash family-tree
 

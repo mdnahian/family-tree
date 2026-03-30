@@ -9,7 +9,7 @@ Group=family-tree
 WorkingDirectory=/opt/family-tree
 Environment="PATH=/opt/family-tree/venv/bin:/usr/local/bin:/usr/bin"
 EnvironmentFile=/opt/family-tree/.env
-ExecStart=/opt/family-tree/venv/bin/gunicorn -c /opt/family-tree/gunicorn.conf.py app:app
+ExecStart=/opt/family-tree/venv/bin/gunicorn -c /opt/family-tree/deploy/configs/gunicorn.conf.py app:app
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=5

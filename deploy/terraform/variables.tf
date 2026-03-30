@@ -12,7 +12,7 @@ variable "ssh_key_fingerprint" {
 variable "region" {
   description = "DigitalOcean region"
   type        = string
-  default     = "lon1"
+  default     = "nyc1"
 }
 
 variable "droplet_size" {
