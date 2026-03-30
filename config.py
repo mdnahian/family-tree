@@ -19,10 +19,6 @@ class Config:
     REMEMBER_COOKIE_DURATION = timedelta(days=30)
     PERMANENT_SESSION_LIFETIME = timedelta(days=30)
 
-    # Admin account (created on first run)
-    ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL')
-    ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
-
     # SendGrid
     SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
     SENDGRID_FROM_EMAIL = os.environ.get('SENDGRID_FROM_EMAIL', 'noreply@example.com')

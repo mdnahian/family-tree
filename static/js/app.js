@@ -1217,6 +1217,17 @@
             const resp = await fetch(`/api/media/${mediaId}/faces`);
             if (!resp.ok) return;
             const faces = await resp.json();
+            if (faces.length === 0) {
+                const statusResp = await fetch(`/api/media/${mediaId}/face-status`);
+                if (statusResp.ok) {
+                    const status = await statusResp.json();
+                    if (status.status === 'pending' || status.status === 'processing') {
+                        container.innerHTML = '<div style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.6);color:#fff;padding:4px 10px;border-radius:8px;font-size:12px;">Detecting faces...</div>';
+                        setTimeout(() => loadFaceBoxes(mediaId), 3000);
+                        return;
+                    }
+                }
+            }
             for (const face of faces) {
                 const box = document.createElement('div');
                 box.className = 'face-box';

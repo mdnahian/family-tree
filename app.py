@@ -20,47 +20,8 @@ from sqlalchemy import event
 from config import Config
 from models import (db, set_sqlite_pragma, User, Invite, FriendRequest,
                     Friendship, Person, School, FamilyUnion, ParentChild,
-                    Media, MediaPerson, Evidence, FaceDetection,
+                    Media, MediaPerson, Evidence, FaceDetection, FaceJob,
                     are_friends, get_friend_ids)
-
-
-def _ensure_admin(app):
-    email = app.config.get('ADMIN_EMAIL')
-    password = app.config.get('ADMIN_PASSWORD')
-    if not email or not password:
-        return
-    existing = User.query.filter_by(email=email).first()
-    if not existing:
-        admin = User(email=email, role='admin')
-        admin.set_password(password)
-        db.session.add(admin)
-        db.session.commit()
-
-
-def _migrate_media_columns():
-    """Add new columns to existing media table if missing."""
-    new_cols = [
-        ('title', 'TEXT'),
-        ('description', 'TEXT'),
-        ('media_date', 'TEXT'),
-        ('location', 'TEXT'),
-    ]
-    # Person table migration
-    person_cols = [
-        ('birth_year', 'INTEGER'),
-    ]
-    for col_name, col_type in person_cols:
-        try:
-            db.session.execute(db.text(f'ALTER TABLE person ADD COLUMN {col_name} {col_type}'))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-    for col_name, col_type in new_cols:
-        try:
-            db.session.execute(db.text(f'ALTER TABLE media ADD COLUMN {col_name} {col_type}'))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
 
 
 def create_app():
@@ -74,8 +35,14 @@ def create_app():
         os.makedirs(os.path.join(app.instance_path), exist_ok=True)
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
         db.create_all()
-        _migrate_media_columns()
-        _ensure_admin(app)
+
+        # Reset any stuck face jobs from a previous crash
+        FaceJob.query.filter_by(status='processing').update({'status': 'pending'})
+        db.session.commit()
+
+    # Start background face detection worker
+    from face_worker import start_worker
+    start_worker(app)
 
     # Flask-Login
     login_manager = LoginManager()
@@ -199,6 +166,40 @@ def create_app():
             sg.send(message)
         except Exception as e:
             app.logger.error(f"Failed to send email: {e}")
+
+    # ── First-run setup ──────────────────────────────────────────────────
+
+    @app.before_request
+    def _require_setup():
+        if request.endpoint in ('setup', 'static'):
+            return
+        if User.query.count() == 0:
+            return redirect(url_for('setup'))
+
+    @app.route('/setup', methods=['GET', 'POST'])
+    def setup():
+        if User.query.count() > 0:
+            return redirect(url_for('login'))
+        if request.method == 'POST':
+            email = request.form.get('email', '').strip().lower()
+            password = request.form.get('password', '')
+            confirm = request.form.get('confirm_password', '')
+            if not email or not password:
+                flash('Email and password are required.', 'error')
+                return render_template('setup.html')
+            if password != confirm:
+                flash('Passwords do not match.', 'error')
+                return render_template('setup.html')
+            if len(password) < 6:
+                flash('Password must be at least 6 characters.', 'error')
+                return render_template('setup.html')
+            admin = User(email=email, role='admin')
+            admin.set_password(password)
+            db.session.add(admin)
+            db.session.commit()
+            login_user(admin, remember=True)
+            return redirect(url_for('index'))
+        return render_template('setup.html')
 
     # ── Page Routes ───────────────────────────────────────────────────────
 
@@ -1012,9 +1013,10 @@ def create_app():
             if person:
                 db.session.add(MediaPerson(media_id=media.id, person_id=pid))
         db.session.commit()
-        # Trigger face detection for images
+        # Queue face detection for images (processed in background)
         if file_type == 'image':
-            _detect_faces_for_media(media.id, save_path)
+            from face_worker import enqueue_face_job
+            enqueue_face_job(media.id, safe_name)
         return jsonify(media.to_dict(file_url_fn=get_media_url)), 201
 
     @app.route('/api/media/<int:media_id>', methods=['GET'])
@@ -1292,29 +1294,28 @@ def create_app():
 
     # ── Face Detection API ────────────────────────────────────────────────
 
-    def _detect_faces_for_media(media_id, file_path):
-        """Run face detection on upload. Non-blocking best-effort."""
-        try:
-            from face import detect_faces, suggest_matches
-            faces = detect_faces(file_path)
-            for f in faces:
-                suggestion = suggest_matches(f['encoding'])
-                fd = FaceDetection(
-                    media_id=media_id,
-                    box_x=f['box'][0],
-                    box_y=f['box'][1],
-                    box_w=f['box'][2],
-                    box_h=f['box'][3],
-                    encoding=f['encoding_bytes'],
-                    suggested_person_id=suggestion['person_id'] if suggestion else None,
-                    confidence=suggestion['distance'] if suggestion else None,
-                )
-                db.session.add(fd)
-            db.session.commit()
-        except ImportError:
-            app.logger.warning("face_recognition not installed, skipping face detection")
-        except Exception as e:
-            app.logger.error(f"Face detection failed: {e}")
+    @app.route('/api/media/<int:media_id>/face-status')
+    @login_required
+    def api_face_status(media_id):
+        job = FaceJob.query.filter_by(media_id=media_id).order_by(FaceJob.id.desc()).first()
+        if not job:
+            return jsonify({'status': 'none'})
+        return jsonify({'status': job.status, 'error': job.error})
+
+    @app.route('/api/admin/rescan-faces', methods=['POST'])
+    @login_required
+    def api_rescan_faces():
+        if not current_user.is_admin:
+            abort(403)
+        from face_worker import enqueue_face_job
+        images = Media.query.filter_by(file_type='image').all()
+        count = 0
+        for img in images:
+            existing = FaceJob.query.filter_by(media_id=img.id, status='pending').first()
+            if not existing:
+                enqueue_face_job(img.id, img.file_path)
+                count += 1
+        return jsonify({'queued': count})
 
     @app.route('/api/media/<int:media_id>/faces')
     @login_required

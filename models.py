@@ -419,3 +419,17 @@ class FaceDetection(db.Model):
             'person_name': f"{self.person.first_name} {self.person.last_name or ''}".strip() if self.person else None,
             'suggested_person_name': f"{self.suggested_person.first_name} {self.suggested_person.last_name or ''}".strip() if self.suggested_person else None,
         }
+
+
+class FaceJob(db.Model):
+    __tablename__ = 'face_job'
+
+    id = db.Column(db.Integer, primary_key=True)
+    media_id = db.Column(db.Integer, db.ForeignKey('media.id'), nullable=False)
+    file_path = db.Column(db.Text, nullable=False)
+    status = db.Column(db.Text, default='pending')  # pending | processing | done | failed
+    error = db.Column(db.Text)
+    created_at = db.Column(db.Text, default=_now)
+    completed_at = db.Column(db.Text)
+
+    media = db.relationship('Media', backref='face_jobs')

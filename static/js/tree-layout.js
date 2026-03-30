@@ -186,19 +186,41 @@
                 if (!parentCouple || processedCouples.has(parentCouple)) return;
                 processedCouples.add(parentCouple);
 
-                // Get this couple's children in order
+                // Collect siblings (children of this couple in this gen)
+                const siblings = [];
                 parentCouple.children.forEach(cid => {
                     if (gen.get(cid) !== g || placed.has(cid)) return;
-                    // Place the child first, then their spouse(s) immediately after
-                    placed.add(cid);
-                    ordered.push(cid);
-                    spousesOf.get(cid).forEach(sid => {
-                        if (gen.get(sid) === g && !placed.has(sid)) {
-                            placed.add(sid);
-                            ordered.push(sid);
-                        }
-                    });
+                    siblings.push(cid);
                 });
+                if (siblings.length === 0) return;
+
+                const sibSet = new Set(siblings);
+                // For each sibling, find their spouses (not siblings themselves)
+                const spouseMap = new Map();
+                siblings.forEach(cid => {
+                    spouseMap.set(cid, (spousesOf.get(cid) || []).filter(sid =>
+                        gen.get(sid) === g && !placed.has(sid) && !sibSet.has(sid)
+                    ));
+                });
+
+                // Layout: [first-sib's spouses | all siblings | last-sib's spouses]
+                // For single child, spouse goes right as normal.
+                // Middle siblings' spouses go to the right edge after the last spouse.
+                const leftSpouses = [];
+                const rightSpouses = [];
+                siblings.forEach((cid, idx) => {
+                    const sp = spouseMap.get(cid) || [];
+                    if (sp.length === 0) return;
+                    if (idx === 0 && siblings.length > 1) {
+                        leftSpouses.push(...sp);
+                    } else {
+                        rightSpouses.push(...sp);
+                    }
+                });
+
+                leftSpouses.forEach(sid => { placed.add(sid); ordered.push(sid); });
+                siblings.forEach(cid => { placed.add(cid); ordered.push(cid); });
+                rightSpouses.forEach(sid => { placed.add(sid); ordered.push(sid); });
             });
 
             // Any persons in this gen not yet placed (no parent in prev gen, e.g. married in)
@@ -232,6 +254,28 @@
             });
         }
 
+        // Helper: build the group of children + their spouses for centering.
+        // Children who "married out" (spouse is from a larger family) are skipped —
+        // they stay with the spouse's family. For remaining children, ALL spouses
+        // are included so the entire family unit moves together.
+        function buildChildGroup(c) {
+            const group = [];
+            c.children.forEach(cid => {
+                const marriedOut = spousesOf.get(cid).some(sid => {
+                    const sc = couples.find(c2 => c2.children.includes(sid));
+                    return sc && sc !== c && sc.children.length > c.children.length;
+                });
+                if (marriedOut) return;
+
+                group.push(cid);
+                spousesOf.get(cid).forEach(sid => {
+                    if (gen.get(sid) === gen.get(cid) && !group.includes(sid))
+                        group.push(sid);
+                });
+            });
+            return group;
+        }
+
         // Sub-pass (b): center children under parents (iterate a few times to converge)
         for (let iter = 0; iter < 3; iter++) {
             // For each couple with children, compute parent midpoint and children midpoint,
@@ -244,15 +288,7 @@
                 if (pxs.length === 0) return;
                 const parentMid = (Math.min(...pxs.map(p => p.x)) + Math.max(...pxs.map(p => p.x)) + CARD_W) / 2;
 
-                // Children midpoint (include their spouses in the same gen)
-                const childGroup = [];
-                c.children.forEach(cid => {
-                    childGroup.push(cid);
-                    spousesOf.get(cid).forEach(sid => {
-                        if (gen.get(sid) === gen.get(cid) && !childGroup.includes(sid))
-                            childGroup.push(sid);
-                    });
-                });
+                const childGroup = buildChildGroup(c);
 
                 const cxs = childGroup.map(cid => positions.get(cid)).filter(Boolean);
                 if (cxs.length === 0) return;
@@ -349,13 +385,7 @@
             const pxs = c.members.map(m => positions.get(m)).filter(Boolean);
             if (pxs.length === 0) return;
             const parentMid = (Math.min(...pxs.map(p => p.x)) + Math.max(...pxs.map(p => p.x)) + CARD_W) / 2;
-            const childGroup = [];
-            c.children.forEach(cid => {
-                childGroup.push(cid);
-                spousesOf.get(cid).forEach(sid => {
-                    if (gen.get(sid) === gen.get(cid) && !childGroup.includes(sid)) childGroup.push(sid);
-                });
-            });
+            const childGroup = buildChildGroup(c);
             const cxs = childGroup.map(cid => positions.get(cid)).filter(Boolean);
             if (cxs.length === 0) return;
             const childMid = (Math.min(...cxs.map(p => p.x)) + Math.max(...cxs.map(p => p.x)) + CARD_W) / 2;

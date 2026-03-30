@@ -1,0 +1,4 @@
+do_token            = "your-digitalocean-api-token"
+ssh_key_fingerprint = "aa:bb:cc:dd:..."
+region              = "lon1"
+droplet_size        = "s-1vcpu-1gb"
